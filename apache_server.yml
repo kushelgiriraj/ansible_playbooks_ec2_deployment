@@ -1,0 +1,74 @@
+- name: Configure Apache Web Server
+  hosts: web_servers
+  become: yes
+  tasks:
+    - name: "Install Apache server"
+      yum:
+        name: httpd
+        state: latest
+    - name: Start Apache Web Server
+      systemd:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: Verify Apache Web Server
+      uri:
+        url: "http://{{ ansible_host }}"
+        status_code: 200
+      register: response
+      ignore_errors: true
+
+    - name: Configure Apache Web Server to start on boot
+      systemd:
+        name: httpd
+        enabled: yes
+
+    - name: Add ec2-user to apache group
+      command: usermod -a -G apache ec2-user
+
+    - name: Verify apache group existence
+      command: "groups"
+      register: groups_output
+
+    - debug:
+        msg: "Apache group exists"
+      when: "'apache' in groups_output.stdout"
+
+    - name: Change group ownership of /var/www directory
+      file:
+        path: /var/www
+        group: apache
+        recurse: yes
+
+    - name: Set directory permissions for /var/www
+      file:
+        path: /var/www
+        mode: "2775"
+        recurse: yes
+
+    - name: Set permissions for directories under /var/www
+      find:
+        paths: /var/www
+        recurse: yes
+        file_type: directory
+      become: yes
+      set_permissions:
+        mode: "2775"
+
+    - name: Set permissions for files under /var/www
+      find:
+        paths: /var/www
+        recurse: yes
+        file_type: file
+      become: yes
+      set_permissions:
+        mode: "0664"
+  
+    - name: Copy index.html to /var/www
+      copy:
+        src: index.html
+        dest: /var/www/index.html
+        owner: ec2-user
+        group: apache
+        mode: "0644"
